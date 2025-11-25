@@ -1,10 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CodeCraft AI Agent</title>
+    <!-- Tailwind CSS (Keep CDN for simplicity in this setup, or migrate to PostCSS later) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -49,25 +49,14 @@
 <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4"
   }
 }
-</script>
-<script>
-    window.onerror = function(message, source, lineno, colno, error) {
-        document.getElementById('root').innerHTML = `
-            <div style="color: #ff6b6b; padding: 20px; font-family: monospace;">
-                <h2>Startup Error Detected</h2>
-                <p>${message}</p>
-                <p>Source: ${source} : ${lineno}</p>
-            </div>
-        `;
-    };
 </script>
 </head>
 <body>
@@ -76,6 +65,7 @@
             Initializing CodeCraft...
         </div>
     </div>
+    <!-- Vite handles this import automatically, but keeping module type is good practice -->
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

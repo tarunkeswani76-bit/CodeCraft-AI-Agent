@@ -208,8 +208,15 @@ const CodeGenerator = () => {
 
   const generateCode = async () => {
     if (!description.trim()) return;
+    
     setLoading(true);
     setOutput(""); // Reset output
+
+    if (!process.env.API_KEY) {
+        setOutput("**CONFIGURATION ERROR: API KEY MISSING**\n\nTo fix this on Vercel:\n1. Go to **Settings** > **Environment Variables**.\n2. Add `API_KEY` with your Google Gemini API Key.\n3. Redeploy your project.");
+        setLoading(false);
+        return;
+    }
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -239,7 +246,7 @@ const CodeGenerator = () => {
       
     } catch (error) {
       console.error(error);
-      setOutput("Error generating code. Please try again.");
+      setOutput("Error generating code. Please try again. Check your API Key and network connection.");
     } finally {
       setLoading(false);
     }
@@ -341,6 +348,8 @@ const CodeGenerator = () => {
   );
 };
 
+const CHAT_SYSTEM_PROMPT = "You are CodeCraft AI, an ultra-patient coding tutor for absolute beginners.\n\nSTRICT RULES FOR EVERY RESPONSE:\n1. EXTREME SIMPLICITY: Explain everything as if the user is 10 years old. Use short sentences and no technical jargon.\n2. BEGINNER CODE ONLY: When providing code, use the most basic, fundamental logic possible. Avoid shortcuts, advanced syntax, or 'clever' one-liners.\n3. ALWAYS RUNNABLE: Provide complete, copy-pasteable code with all necessary imports and main functions.\n4. NO LECTURES: Keep text explanations short and direct.\n5. BE SUPPORTIVE: Encourage the user.";
+
 const ChatAssistant = () => {
   const [messages, setMessages] = useState<{role: string, text: string}[]>([]);
   const [input, setInput] = useState('');
@@ -351,14 +360,19 @@ const ChatAssistant = () => {
   const chatSessionRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!chatSessionRef.current) {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        chatSessionRef.current = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            config: {
-                systemInstruction: "You are CodeCraft AI, a flawless coding tutor for beginners. Your goal is to make coding effortless. \n\nRULES:\n1. SIMPLICITY FIRST: Always provide the simplest, most readable solution. Avoid complex syntax.\n2. ZERO ERRORS: Ensure all code snippets are syntax-perfect and runnable.\n3. EXPLAIN CLEARLY: Use plain English and analogies. Avoid technical jargon.\n4. FULL CONTEXT: When writing code (especially C, C++, Java), always include the full boilerplate (imports, main function, etc.) so the user can copy-paste and run it immediately."
-            }
-        });
+    // Only initialize if API Key is present
+    if (process.env.API_KEY && !chatSessionRef.current) {
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            chatSessionRef.current = ai.chats.create({
+                model: 'gemini-2.5-flash',
+                config: {
+                    systemInstruction: CHAT_SYSTEM_PROMPT
+                }
+            });
+        } catch (e) {
+            console.error("Failed to init chat", e);
+        }
     }
   }, []);
 
@@ -370,6 +384,13 @@ const ChatAssistant = () => {
 
   const sendMessage = async () => {
     if (!input.trim()) return;
+
+    if (!process.env.API_KEY) {
+        setMessages(prev => [...prev, { role: 'user', text: input }]);
+        setMessages(prev => [...prev, { role: 'model', text: "**CONFIGURATION ERROR**: API Key is missing. Please check Vercel settings." }]);
+        setInput('');
+        return;
+    }
     
     const userMsg = input;
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
@@ -377,6 +398,17 @@ const ChatAssistant = () => {
     setIsTyping(true);
 
     try {
+        if (!chatSessionRef.current) {
+            // Re-attempt init if it failed initially
+             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+             chatSessionRef.current = ai.chats.create({
+                model: 'gemini-2.5-flash',
+                config: {
+                    systemInstruction: CHAT_SYSTEM_PROMPT
+                }
+            });
+        }
+
         const resultStream = await chatSessionRef.current.sendMessageStream({ message: userMsg });
         
         let fullResponse = "";
@@ -392,7 +424,7 @@ const ChatAssistant = () => {
         }
     } catch (e) {
         console.error(e);
-        setMessages(prev => [...prev, { role: 'model', text: "Sorry, I encountered an error. Please try again." }]);
+        setMessages(prev => [...prev, { role: 'model', text: "Sorry, I encountered an error. Please check your internet connection or API Key." }]);
     } finally {
         setIsTyping(false);
     }
@@ -409,7 +441,7 @@ const ChatAssistant = () => {
           {messages.length === 0 && (
              <div className="text-center text-slate-500 mt-20">
                 <i className="fa-solid fa-comments text-4xl mb-4 opacity-50"></i>
-                <p>Ask me anything about coding!</p>
+                <p>Ask me anything about coding! I'll explain it simply.</p>
              </div>
           )}
           {messages.map((msg, i) => (
@@ -490,28 +522,28 @@ const App = () => {
           <Header />
           
           {/* Tabs */}
-          <div className="flex justify-center mb-8">
-            <div className="bg-slate-900/50 p-1.5 rounded-xl border border-slate-800 flex gap-1">
+          <div className="flex justify-center mb-8 overflow-x-auto">
+            <div className="bg-slate-900/50 p-1.5 rounded-xl border border-slate-800 flex gap-1 min-w-max">
                 <button 
                   onClick={() => setActiveTab('generator')}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
+                  className={`px-4 md:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
                     ${activeTab === 'generator' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                 >
-                  <i className="fa-solid fa-code"></i> Generator
+                  <i className="fa-solid fa-code"></i> <span className="hidden sm:inline">Generator</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('chat')}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
+                  className={`px-4 md:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
                     ${activeTab === 'chat' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                 >
-                  <i className="fa-solid fa-comments"></i> Chat
+                  <i className="fa-solid fa-comments"></i> <span className="hidden sm:inline">Chat</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('resources')}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
+                  className={`px-4 md:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2
                     ${activeTab === 'resources' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                 >
-                  <i className="fa-solid fa-download"></i> Resources
+                  <i className="fa-solid fa-download"></i> <span className="hidden sm:inline">Resources</span>
                 </button>
             </div>
           </div>
@@ -523,8 +555,28 @@ const App = () => {
              {activeTab === 'resources' && <ResourceGrid />}
           </main>
           
-          <footer className="mt-20 text-center text-slate-600 text-sm font-mono">
-             <p>Powered by Gemini 2.5 Flash • CodeCraft AI Agent &copy; {new Date().getFullYear()}</p>
+          <footer className="mt-20 pb-10 text-center text-slate-600 text-sm font-mono">
+             <p className="mb-4">Powered by Gemini 2.5 Flash • CodeCraft AI Agent &copy; {new Date().getFullYear()}</p>
+             
+             {/* API Key Visibility Section */}
+             <div className="inline-flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900/50 border border-slate-800 max-w-md mx-auto">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-slate-500">
+                   <i className="fa-solid fa-key"></i> Environment Variable Status
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-3 bg-black/30 px-3 py-2 rounded-lg border border-slate-800/50">
+                        <span className={`flex h-2 w-2 rounded-full ${process.env.API_KEY ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}></span>
+                        <code className="text-xs text-slate-400 font-mono break-all">
+                            API_KEY = {process.env.API_KEY || "Not Detected"}
+                        </code>
+                    </div>
+                    {!process.env.API_KEY && (
+                        <div className="text-xs text-red-400">
+                             Please configure API_KEY in your deployment settings.
+                        </div>
+                    )}
+                </div>
+             </div>
           </footer>
         </div>
       </div>
