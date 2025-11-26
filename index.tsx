@@ -6,8 +6,24 @@ import { GoogleGenAI } from "@google/genai";
 declare var process: {
   env: {
     API_KEY?: string;
+    GEMINI_API_KEY?: string;
     [key: string]: string | undefined;
   }
+};
+
+// --- Helper: Robust API Initialization ---
+const getGenAI = () => {
+  // 1. Manually retrieve the key from the environment variables.
+  // We check both common names to be helpful.
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+
+  // 2. CHECK: If it's missing, throw a clear error before the API call.
+  if (!apiKey) {
+    throw new Error("Configuration Error: The API_KEY or GEMINI_API_KEY environment variable is missing. Please add it in your Vercel/Netlify settings.");
+  }
+
+  // 3. Initialize the client by explicitly passing the key.
+  return new GoogleGenAI({ apiKey });
 };
 
 // --- Configuration & Constants ---
@@ -51,6 +67,9 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declare props to satisfy strict TypeScript environments
+  declare props: Readonly<ErrorBoundaryProps>;
+  
   state: ErrorBoundaryState = { hasError: false, error: null };
 
   constructor(props: ErrorBoundaryProps) {
@@ -222,14 +241,10 @@ const CodeGenerator = () => {
     setLoading(true);
     setOutput(""); // Reset output
 
-    if (!process.env.API_KEY) {
-        setOutput("**CONFIGURATION ERROR: API KEY MISSING**\n\nTo fix this on Vercel:\n1. Go to **Settings** > **Environment Variables**.\n2. Add `API_KEY` with your Google Gemini API Key.\n3. Redeploy your project.");
-        setLoading(false);
-        return;
-    }
-
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Use the robust initialization helper
+      const ai = getGenAI();
+
       const prompt = `Act as an expert coding tutor for beginners.
       Task: Write a ${language} program that ${description}.
       
@@ -254,9 +269,11 @@ const CodeGenerator = () => {
         }
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setOutput("Error generating code. Please try again. Check your API Key and network connection.");
+      const errorMsg = error.message || "Unknown error";
+      // Display the error clearly to the user
+      setOutput(`**CONFIGURATION ERROR**\n\n${errorMsg}\n\nTo fix this on Vercel:\n1. Go to **Settings** > **Environment Variables**.\n2. Add \`API_KEY\` or \`GEMINI_API_KEY\` with your Google Gemini API Key.\n3. Redeploy your project.`);
     } finally {
       setLoading(false);
     }
@@ -369,21 +386,25 @@ const ChatAssistant = () => {
   // Initialize chat only once
   const chatSessionRef = useRef<any>(null);
 
-  useEffect(() => {
-    // Only initialize if API Key is present
-    if (process.env.API_KEY && !chatSessionRef.current) {
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            chatSessionRef.current = ai.chats.create({
-                model: 'gemini-2.5-flash',
-                config: {
-                    systemInstruction: CHAT_SYSTEM_PROMPT
-                }
-            });
-        } catch (e) {
-            console.error("Failed to init chat", e);
-        }
+  // Helper to safely init chat
+  const initChat = () => {
+    try {
+        const ai = getGenAI(); // Use robust helper
+        chatSessionRef.current = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: CHAT_SYSTEM_PROMPT
+            }
+        });
+        return true;
+    } catch (e) {
+        console.error("Failed to init chat", e);
+        return false;
     }
+  };
+
+  useEffect(() => {
+    initChat();
   }, []);
 
   useEffect(() => {
@@ -395,28 +416,19 @@ const ChatAssistant = () => {
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    if (!process.env.API_KEY) {
-        setMessages(prev => [...prev, { role: 'user', text: input }]);
-        setMessages(prev => [...prev, { role: 'model', text: "**CONFIGURATION ERROR**: API Key is missing. Please check Vercel settings." }]);
-        setInput('');
-        return;
-    }
-    
     const userMsg = input;
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setInput('');
     setIsTyping(true);
 
     try {
+        // Ensure chat session exists
         if (!chatSessionRef.current) {
-            // Re-attempt init if it failed initially
-             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-             chatSessionRef.current = ai.chats.create({
-                model: 'gemini-2.5-flash',
-                config: {
-                    systemInstruction: CHAT_SYSTEM_PROMPT
-                }
-            });
+             const success = initChat();
+             if (!success) {
+                // If init failed (missing key), throw specific error to catch block
+                throw new Error("Missing API_KEY or GEMINI_API_KEY environment variable.");
+             }
         }
 
         const resultStream = await chatSessionRef.current.sendMessageStream({ message: userMsg });
@@ -432,9 +444,10 @@ const ChatAssistant = () => {
                 return newArr;
             });
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        setMessages(prev => [...prev, { role: 'model', text: "Sorry, I encountered an error. Please check your internet connection or API Key." }]);
+        const errorMsg = e.message || "Unknown error";
+        setMessages(prev => [...prev, { role: 'model', text: `**CONFIGURATION ERROR**: ${errorMsg}. Please check Vercel settings.` }]);
     } finally {
         setIsTyping(false);
     }

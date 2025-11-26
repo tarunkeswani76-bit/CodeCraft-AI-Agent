@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // This allows the Vercel environment variable API_KEY to be visible in the browser code
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    // Expose environment variables to the browser
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
+    'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY)
   }
 });
